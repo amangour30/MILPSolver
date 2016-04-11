@@ -95,11 +95,17 @@ def DFSSolver(c,d,A,G,b):
 		optVal = value(NewProb.objective)
 		if LpStatus[NewProb.status]!='Infeasible' and LpStatus[NewProb.status]!='Unbounded' and BestSol > optVal:
 			#add heuristic for node selection here
+			fracvariables = []
+			k = 5
 			for v in NewProb.variables():
 				if v.name[0] == 'y' and v.varValue != floor(v.varValue):
 					currNode.status = 0
 					branchVar = int(v.name[2:])
 					branchPoint = floor(v.varValue)
+					if len(fracvariables) < k :
+						fracvariables.append([branchVar, branchPoint])
+					else:
+						break
 					#why are we not breaking once we have found the branching variable
 					
 		if currNode.status == 2 and LpStatus[NewProb.status]=='Optimal' and BestSol > optVal:
@@ -108,6 +114,35 @@ def DFSSolver(c,d,A,G,b):
 			
 		
 		if currNode.status == 0:
+			bestVar = 0
+			bestBranchPoint = 0
+			optvalsofar = float("inf")
+			for tempnode in fracvariables:
+				branchVar = tempnode[0]
+				branchPoint = tempnode[1]
+				newNode = LPNode(currCode+'0')
+				AddlC = copy(currNode.AddlC)
+				AddlB = copy(currNode.AddlB)
+				newConst = y[branchVar]
+				AddlC.append(newConst)
+				AddlB.append(branchPoint)
+				newNode.add_Constraint(AddlC,AddlB)
+				# ProbStack.append(newNode)
+				NewProb2 = OriginalProb.copy()
+				#adding a new constaint to the original problem
+				if size(newNode.AddlC) != 0: 
+					for i in range(size(newNode.AddlC)):
+						NewProb2 += newNode.AddlC[i] <= newNode.AddlB[i]
+
+				NewProb2.solve(cbc_solver)
+				optVal2 = value(NewProb2.objective)
+				
+				if LpStatus[NewProb2.status]!='Infeasible' and LpStatus[NewProb2.status]!='Unbounded' and optVal2 < optvalsofar:
+					bestVar = branchVar
+					bestBranchPoint = branchPoint
+
+			branchVar = bestVar
+			branchPoint = bestBranchPoint
 			newNode = LPNode(currCode+'0')
 			AddlC = copy(currNode.AddlC)
 			AddlB = copy(currNode.AddlB)
@@ -125,7 +160,7 @@ def DFSSolver(c,d,A,G,b):
 			AddlB.append(-branchPoint - 1)
 			newNode.add_Constraint(AddlC,AddlB)
 			ProbStack.append(newNode)
-		
+				#once a new problem is created solve it
 		
 	if currBestSol == None:	
 		return Soln('Infeasible or Unbounded',[],[],float("inf"))
